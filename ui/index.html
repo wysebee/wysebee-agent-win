@@ -15,26 +15,21 @@
       <h1>Wysebee Agent</h1>
       <p id="mac" class="sub"></p>
     </div>
-    <!-- Paired: the agent this PC belongs to, and whether the link is up. -->
-    <div id="agent-chip" class="agent-chip" hidden>
-      <div>
-        <div id="agent-label" class="agent-name"></div>
-        <div id="agent-handle" class="sub"></div>
-      </div>
-      <span id="connected" class="badge"></span>
-    </div>
   </header>
 
   <main>
     <p id="error" class="banner error" role="alert" hidden></p>
 
+    <!-- The top card: pairing while unpaired, the code while waiting, the link once paired. -->
+
     <!-- Not paired: a name for the new agent. -->
-    <section id="unpaired" class="panel" hidden>
+    <section id="unpaired" hidden>
       <p id="note" class="banner" hidden></p>
       <p id="refusal" class="banner error" hidden></p>
       <div class="card hero">
         <h2 class="card-title">Pair this PC</h2>
         <p class="muted">Pair this PC with Wysebee to let one agent run the programs you allow here and use the folders you pick. Pairing makes a new agent.</p>
+        <p class="server-line">Server: <span class="server-url"></span></p>
         <form id="pair-form">
           <label for="agent-name">Name for the new agent</label>
           <div class="row">
@@ -46,7 +41,7 @@
     </section>
 
     <!-- Waiting for the code to be typed in Wysebee. -->
-    <section id="waiting" class="panel" hidden>
+    <section id="waiting" hidden>
       <div class="card hero">
         <p>Type this code in Wysebee, under <strong>Devices</strong>:</p>
         <div class="code-row">
@@ -59,17 +54,41 @@
         </div>
         <p id="expires" class="muted center"></p>
         <p class="muted center">The agent will be called <strong id="typed-name"></strong>.</p>
+        <p class="muted center">Server: <span class="server-url"></span></p>
         <div class="row center"><button id="cancel" type="button">Cancel</button></div>
       </div>
     </section>
 
-    <!-- Paired: its tabs. -->
-    <section id="paired" hidden>
+    <!-- Paired: the agent this PC belongs to, and whether the link is up. -->
+    <section id="linked" hidden>
+      <div class="card hero status-card">
+        <div class="row spread">
+          <div class="status-who">
+            <h2 id="agent-label" class="card-title"></h2>
+            <p id="agent-handle" class="muted"></p>
+          </div>
+          <span id="connected" class="pill"></span>
+        </div>
+        <p id="connected-note" class="muted"></p>
+        <p class="server-line">Server: <span class="server-url"></span></p>
+      </div>
+    </section>
+
+    <!-- The tabs, in every state: Tools and Server always; the rest once paired. -->
+    <section id="tabbed">
       <nav class="tabs" role="tablist" aria-label="Wysebee Agent">
+        <button id="tab-tools" type="button" role="tab" data-tab="tools">Tools</button>
         <button id="tab-programs" type="button" role="tab" data-tab="programs">Programs <span id="waiting-count" class="count" hidden></span></button>
         <button id="tab-folders" type="button" role="tab" data-tab="folders">Folders</button>
         <button id="tab-settings" type="button" role="tab" data-tab="settings">Settings</button>
+        <button id="tab-server" type="button" role="tab" data-tab="server">Server</button>
       </nav>
+
+      <!-- Tools: what an agent paired with this PC can do here, and whether each is on. -->
+      <div id="panel-tools" class="panel" role="tabpanel" aria-labelledby="tab-tools" hidden>
+        <p class="muted intro">What the agent paired with this PC can use here. The ones marked Off do nothing until you turn them on in Settings.</p>
+        <ul id="tools" class="card list"></ul>
+      </div>
 
       <!-- Programs: the agent's programs and skills, to allow; shown when it has any. -->
       <div id="panel-programs" class="panel" role="tabpanel" aria-labelledby="tab-programs" hidden>
@@ -111,6 +130,7 @@
 
       <!-- Settings: what the agent may do here, the app, the pairing. -->
       <div id="panel-settings" class="panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
+        <div id="settings-paired">
         <h2 class="section">What Wysebee may do on this PC</h2>
         <div class="card list">
           <label class="setting" id="row-run">
@@ -171,6 +191,8 @@
             <p>Let Wysebee use the Android phones plugged into this PC through adb — tap, type, install and uninstall apps and run adb shell commands — without asking first?</p>
             <div class="row"><button id="android-on" type="button" class="danger-solid">Turn on</button><button id="android-cancel" type="button">Cancel</button></div>
           </div>
+
+        </div>
         </div>
 
         <h2 class="section">App</h2>
@@ -195,6 +217,7 @@
           </div>
         </div>
 
+        <div id="settings-pairing">
         <h2 class="section">Pairing</h2>
         <div class="card">
           <div id="unpair-row" class="row spread">
@@ -209,12 +232,28 @@
             </div>
           </div>
         </div>
+        </div>
+      </div>
+
+      <!-- Server: the Wysebee Cloud to pair with. Changed only while unpaired: a link keeps
+           the cloud it was made with. It wins over WYSEBEE_CLOUD_URL, which is only the
+           default ("Use the default"). -->
+      <div id="panel-server" class="panel" role="tabpanel" aria-labelledby="tab-server" hidden>
+        <p class="muted intro">The Wysebee Cloud this PC pairs with. To use a self-hosted or local Wysebee, enter its address here, then pair.</p>
+        <p id="server-locked" class="banner" hidden>This PC is paired with this server. Unpair it (Settings) to switch servers.</p>
+        <form id="server-form" class="card">
+          <label for="server-url">Wysebee Cloud server</label>
+          <div class="row">
+            <input id="server-url" type="text" autocomplete="off" spellcheck="false" placeholder="https://app.wysebee.com">
+            <button id="server-save" type="submit" class="primary">Save</button>
+          </div>
+          <p class="muted">An https address, or http for this computer (localhost, 127.0.0.1).</p>
+          <div class="row"><button id="server-default" type="button">Use the default</button></div>
+        </form>
       </div>
     </section>
   </main>
 
-  <!-- No way to change Wysebee Cloud's address here: a release talks to app.wysebee.com;
-       development sets WYSEBEE_CLOUD_URL (scripts\run_dev.ps1). -->
   <footer><p id="version" class="muted"></p></footer>
 
   <script src="app.js"></script>

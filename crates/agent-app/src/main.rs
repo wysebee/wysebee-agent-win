@@ -14,6 +14,8 @@
 //!   checks it.
 //! - **Show in File Explorer** opens a skill's own folder with `explorer.exe`, the path as its
 //!   one argument (never a shell).
+//! - **The Server tab** saves the Wysebee Cloud address to pair with (the core's
+//!   `set_cloud_url`: only while unpaired; it wins over `WYSEBEE_CLOUD_URL`, the default).
 //! - What is real here and handed to the core: the state folder
 //!   (`%LOCALAPPDATA%\Wysebee Agent`; `WYSEBEE_AGENT_STATE_DIR` moves it), the person's home
 //!   (`%USERPROFILE%`), the `PATH` plus the app execution aliases' and Scoop's folders, the
@@ -103,6 +105,13 @@ async fn status(agent: State<'_, Agent>) -> Result<Value, String> {
     let mut status = serde_json::to_value(agent.status()).map_err(|e| e.to_string())?;
     status["autostart"] = Value::Bool(autostart::is_enabled());
     Ok(status)
+}
+
+/// The Wysebee Cloud server to pair with, from the Server tab ("" for the default). The
+/// core checks it (https, or http to this computer) and refuses while paired.
+#[tauri::command]
+async fn set_cloud_url(agent: State<'_, Agent>, url: String) -> Result<(), String> {
+    agent.set_cloud_url(&url)
 }
 
 #[tauri::command]
@@ -276,7 +285,7 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(agent)
-        .invoke_handler(tauri::generate_handler![status, start_pairing, cancel_pairing, allow, revoke, allow_skill, revoke_skill, show_skill_folder, choose_folder, add_folder, update_folder, remove_folder, set_paused, set_any_program, set_screen_control, set_dev_access, set_android_dev, unpair, set_autostart, set_theme])
+        .invoke_handler(tauri::generate_handler![status, start_pairing, cancel_pairing, allow, revoke, allow_skill, revoke_skill, show_skill_folder, choose_folder, add_folder, update_folder, remove_folder, set_paused, set_any_program, set_screen_control, set_dev_access, set_android_dev, unpair, set_cloud_url, set_autostart, set_theme])
         .setup(move |app| {
             // Shown at launch only when there is something to do in it: pairing, or a
             // program or a skill waiting to be allowed. Otherwise the app starts in the notification area.

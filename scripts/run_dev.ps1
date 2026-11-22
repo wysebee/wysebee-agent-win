@@ -49,7 +49,7 @@ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 
 $env:WYSEBEE_CLOUD_URL = $Url
 $env:WYSEBEE_AGENT_STATE_DIR = $StateDir
-Write-Host "Cloud:  $env:WYSEBEE_CLOUD_URL"
+Write-Host "Cloud:  $env:WYSEBEE_CLOUD_URL (the default; an address saved in the Server tab wins)"
 Write-Host "State:  $env:WYSEBEE_AGENT_STATE_DIR"
 
 $CargoProfile = @()

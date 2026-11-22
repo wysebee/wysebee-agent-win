@@ -262,16 +262,32 @@ async fn the_cloud_address_is_https_or_this_computer_and_a_link_keeps_its_own() 
     assert_eq!(agent.state().link.unwrap().cloud_url, fake.url);
     assert_eq!(agent.set_cloud_url("https://other.example").unwrap_err(), "Unpair first: the address is used when this PC is paired.");
 
-    // The environment wins for a new pairing, but the link keeps the cloud it was made
-    // with: its secret goes nowhere else.
+    // The saved address wins over the environment's, and the link keeps the cloud it was
+    // made with: its secret goes nowhere else.
     let moved = Agent::open(bench.options(Some("https://elsewhere.example"), Bench::timing()));
-    assert_eq!(moved.cloud(), ("https://elsewhere.example".to_string(), Source::Env));
-    assert_eq!((moved.status().cloud_url, moved.status().cloud_url_source), (fake.url.clone(), Source::Env));
+    assert_eq!(moved.cloud(), (fake.url.clone(), Source::Saved));
+    assert_eq!((moved.status().cloud_url, moved.status().cloud_url_source, moved.status().cloud_default), (fake.url.clone(), Source::Saved, "https://elsewhere.example".to_string()));
     assert_eq!(moved.step().await, Step::Paired { calls: 0 });
 
     // An environment address that does not pass the rule is not used.
     let insecure = Agent::open(bench.options(Some("http://evil.example"), Bench::timing()));
-    assert_eq!(insecure.cloud(), (fake.url.clone(), Source::Saved));
+    assert_eq!(insecure.status().cloud_default, "https://app.wysebee.com");
+}
+
+#[tokio::test]
+async fn the_environment_is_only_the_default_a_saved_address_wins_over() {
+    let bench = Bench::new();
+    let agent = Agent::open(bench.options(Some("http://localhost:9/"), Bench::timing()));
+    assert_eq!(agent.cloud(), ("http://localhost:9".to_string(), Source::Env));
+    agent.set_cloud_url("http://localhost:8001").unwrap();
+    let saved = agent.status();
+    assert_eq!((saved.cloud_url.as_str(), saved.cloud_url_source, saved.cloud_default.as_str()), ("http://localhost:8001", Source::Saved, "http://localhost:9"));
+    // Kept across a restart, still over the environment's.
+    let again = Agent::open(bench.options(Some("http://localhost:9"), Bench::timing()));
+    assert_eq!(again.cloud(), ("http://localhost:8001".to_string(), Source::Saved));
+    // "Use the default": the environment's again.
+    again.set_cloud_url("").unwrap();
+    assert_eq!(again.cloud(), ("http://localhost:9".to_string(), Source::Env));
 }
 
 #[tokio::test]

@@ -94,7 +94,8 @@ pub struct Options {
     /// The `PATH` programs are looked for on when one is allowed
     /// ([`programs::search_path`] of the app's own).
     pub path: Option<OsString>,
-    /// `WYSEBEE_CLOUD_URL`, when set.
+    /// `WYSEBEE_CLOUD_URL`, when set: the default, which an address saved from the
+    /// window wins over.
     pub cloud_url: Option<String>,
     /// Where the link's secret is kept.
     pub secrets: Arc<dyn SecretStore>,
@@ -207,6 +208,8 @@ pub struct Status {
     pub storing: bool,
     pub cloud_url: String,
     pub cloud_url_source: Source,
+    /// What "Use the default" goes back to: `WYSEBEE_CLOUD_URL`, else the built-in one.
+    pub cloud_default: String,
     pub device_name: String,
     pub version: String,
 }
@@ -402,6 +405,7 @@ impl Agent {
             folders: state.folders.iter().enumerate().map(|(i, f)| FolderStatus { id: f.id.clone(), number: i + 1, name: f.name.clone(), path: f.path.display().to_string(), mode: f.mode, description: f.description.clone(), present: f.path.is_dir() }).collect(),
             cloud_url,
             cloud_url_source,
+            cloud_default: cloud::default_url(self.0.opts.cloud_url.as_deref()).0,
             device_name: link::device_name(&self.0.opts.device_name),
             version: self.0.opts.version.clone(),
         }

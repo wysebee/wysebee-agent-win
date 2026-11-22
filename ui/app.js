@@ -240,7 +240,60 @@ function closeFolderForm() {
   $('folder-add-row').hidden = false;
 }
 
-// Show one tab (programs, folders or settings), and remember it.
+// What an agent paired with this PC can use here: each group of tools, the ops it answers,
+// and where it stands (a count, or the switch in Settings).
+function toolRows(s) {
+  const paired = s.state === 'paired';
+  const allowed = (list) => list.filter((x) => x.status === 'approved').length;
+  const switched = (on) => (on ? { text: 'On', kind: 'on' } : { text: 'Off', kind: '' });
+  const counted = (n, total, none) => (!paired ? { text: 'After pairing', kind: '' } : total === 0 ? { text: none, kind: '' } : { text: `${n} of ${total} allowed`, kind: n > 0 ? 'ok' : 'waits' });
+  return [
+    { name: 'Programs you allow', ops: 'Run local program', text: 'The programs set up for the agent in Wysebee, each run only after you allow it here: an argument list, never a shell; 60 seconds at most.', state: counted(allowed(s.programs || []), (s.programs || []).length, 'None set up') },
+    { name: 'Skill scripts', ops: 'skill_run', text: 'The scripts a skill\'s SKILL.md declares, run in its folder on this PC once you allow the skill.', state: counted(allowed(s.skills || []), (s.skills || []).length, 'No skills') },
+    { name: 'Folders', ops: 'folder_find · folder_list · folder_read · folder_write', text: 'Find, list, read and (if you let it) write files in the folders you pick in the Folders tab — nothing else on this PC.', state: !paired ? { text: 'After pairing', kind: '' } : s.folders.length ? { text: `${s.folders.length} folder${s.folders.length === 1 ? '' : 's'}`, kind: 'ok' } : { text: 'None picked', kind: '' } },
+    { name: 'Run any program', ops: 'program_run', text: 'Any program the agent names, with your rights — never through a shell; dangerous ones are refused.', state: switched(s.any_program) },
+    { name: 'See and control the screen', ops: 'screen_screenshot · screen_action', text: 'Screenshots, the mouse and the keyboard.', state: switched(s.screen_control) },
+    { name: 'Work as a developer', ops: 'dev_shell · dev_job · dev_file', text: 'PowerShell and cmd commands and files anywhere on this PC, as you; background jobs.', state: switched(s.dev_access) },
+    { name: 'Use Android phones', ops: 'android_dev', text: 'The phones and emulators adb sees: screenshots, logcat, taps, typing, installing apps.', state: switched(s.android_dev) },
+  ];
+}
+
+let drawnTools = '';
+function drawTools(s) {
+  const rows = toolRows(s);
+  const key = JSON.stringify(rows);
+  if (key === drawnTools) return;
+  drawnTools = key;
+  const list = $('tools');
+  list.replaceChildren();
+  for (const t of rows) {
+    const item = el('li', 'setting tool');
+    const text = el('span', 'text');
+    text.append(el('span', 'name', t.name), el('span', 'muted', t.text), el('span', 'ops', t.ops));
+    item.append(text, el('span', 'tool-state' + (t.state.kind ? ` ${t.state.kind}` : ''), t.state.text));
+    list.append(item);
+  }
+}
+
+// The Server tab: the address in use, which the field shows unless the person is typing.
+let serverTyped = false;
+function drawServer(s) {
+  for (const node of document.querySelectorAll('.server-url')) node.textContent = s.cloud_url;
+  const locked = s.state === 'paired' || s.state === 'waiting';
+  $('server-locked').hidden = !locked;
+  $('server-locked').textContent = s.state === 'waiting' ? 'A pairing is under way with this server. Cancel it to switch servers.' : 'This PC is paired with this server. Unpair it (Settings) to switch servers.';
+  $('server-url').disabled = locked;
+  $('server-save').disabled = locked;
+  $('server-default').disabled = locked || s.cloud_url_source !== 'saved';
+  $('server-default').textContent = `Use the default (${s.cloud_default || 'https://app.wysebee.com'})`;
+  $('server-url').placeholder = s.cloud_default || '';
+  if (!serverTyped || locked) {
+    serverTyped = false;
+    if (document.activeElement !== $('server-url')) $('server-url').value = s.cloud_url;
+  }
+}
+
+// Show one tab, and remember it.
 function showTab(name) {
   tab = name;
   try {
@@ -256,14 +309,21 @@ function showTab(name) {
   }
 }
 
+const CONNECTION = {
+  connected: { text: 'Connected', kind: 'on', note: 'The agent can use this PC now.' },
+  paused: { text: 'Paused', kind: 'warn', note: 'Paused: nothing runs until you turn "Run programs on this PC" back on in Settings.' },
+  down: { text: 'Connecting…', kind: '', note: 'Reaching Wysebee: this PC tries again on its own.' },
+};
+
 function draw(s) {
   const first = last === null;
   last = s;
   $('mac').textContent = s.device_name;
+  const paired = s.state === 'paired';
   const unpaired = s.state === 'unpaired' || s.state === 'refused';
   $('unpaired').hidden = !unpaired;
   $('waiting').hidden = s.state !== 'waiting';
-  $('paired').hidden = s.state !== 'paired';
+  $('linked').hidden = !paired;
 
   if (unpaired) {
     $('note').textContent = s.note || '';
@@ -276,12 +336,28 @@ function draw(s) {
     $('expires').textContent = s.expires_in == null ? '' : timeLeft(s.expires_in);
     $('typed-name').textContent = s.name || '';
   }
-  $('agent-chip').hidden = s.state !== 'paired';
-  if (s.state === 'paired') {
+
+  // Tabs: Tools, Settings and Server always; Folders once paired; Programs once the agent
+  // has programs or skills here.
+  const any = paired && (s.programs.length > 0 || s.skills.length > 0);
+  $('tab-programs').hidden = !any;
+  $('tab-folders').hidden = !paired;
+  $('settings-paired').hidden = !paired;
+  $('settings-pairing').hidden = !paired;
+  $('waiting-count').textContent = String(s.waiting || 0);
+  $('waiting-count').hidden = !(paired && s.waiting);
+  // At launch, what waits for the person comes first; else their last tab, if shown.
+  let want = first && paired && s.waiting > 0 ? 'programs' : tab || (any ? 'programs' : 'tools');
+  if ($(`tab-${want}`) === null || $(`tab-${want}`).hidden) want = 'tools';
+  if (want !== tab || $(`panel-${want}`).hidden) showTab(want);
+
+  if (paired) {
     $('agent-label').textContent = s.agent.label || s.agent.name;
     $('agent-handle').textContent = '@' + s.agent.name;
-    $('connected').textContent = s.connected ? 'Connected' : 'Not connected';
-    $('connected').className = 'badge' + (s.connected ? ' on' : '');
+    const c = s.paused ? CONNECTION.paused : s.connected ? CONNECTION.connected : CONNECTION.down;
+    $('connected').textContent = c.text;
+    $('connected').className = 'pill' + (c.kind ? ` ${c.kind}` : '');
+    $('connected-note').textContent = c.note;
     $('run-switch').checked = !s.paused;
     $('paused-note').hidden = !s.paused;
     // While its confirmation shows, a switch stays off until Turn on; one that is on is marked.
@@ -289,18 +365,8 @@ function draw(s) {
       if ($(`${key}-confirm`).hidden) $(`${key}-switch`).checked = !!on;
       $(`row-${key}`).classList.toggle('on', !!on);
     }
-    $('autostart').checked = !!s.autostart;
-    // The Programs tab only when the agent has programs or skills here; its count, what waits.
-    const any = s.programs.length > 0 || s.skills.length > 0;
-    $('tab-programs').hidden = !any;
     $('programs-block').hidden = s.programs.length === 0;
     $('skills-block').hidden = s.skills.length === 0;
-    $('waiting-count').textContent = String(s.waiting);
-    $('waiting-count').hidden = !s.waiting;
-    // At launch, what waits for the person comes first; else their last tab.
-    let want = first && s.waiting > 0 ? 'programs' : tab || (any ? 'programs' : 'settings');
-    if (want === 'programs' && !any) want = 'settings';
-    if (want !== tab || $(`panel-${want}`).hidden) showTab(want);
     drawPrograms(s.programs);
     drawSkills(s.skills);
     drawFolders(s.folders);
@@ -310,6 +376,9 @@ function draw(s) {
     $('unpair-confirm').hidden = true;
     $('unpair-row').hidden = false;
   }
+  $('autostart').checked = !!s.autostart;
+  drawTools(s);
+  drawServer(s);
 
   $('version').textContent = `Wysebee Agent ${s.version}`;
 }
@@ -433,6 +502,25 @@ $('folder-add').addEventListener('click', async () => {
   }
 });
 $('folder-cancel').addEventListener('click', closeFolderForm);
+$('server-url').addEventListener('input', () => { serverTyped = true; });
+$('server-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  showError('');
+  try {
+    await invoke('set_cloud_url', { url: $('server-url').value });
+    serverTyped = false;
+    $('server-url').blur();
+  } catch (e) {
+    // A refusal keeps what was typed, to be corrected.
+    showError(String(e));
+  }
+  await refresh();
+});
+$('server-default').addEventListener('click', async () => {
+  serverTyped = false;
+  $('server-url').blur();
+  await run('set_cloud_url', { url: '' });
+});
 $('folder-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!editing) return;

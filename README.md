@@ -213,7 +213,9 @@ $env:WYSEBEE_AGENT_STATE_DIR = "$env:TEMP\wysebee-agent-dev"   # optional: apart
 cargo run -p agent-app
 ```
 
-The window has no place to change the address: only `WYSEBEE_CLOUD_URL` does, for development.
+Or, while unpaired, enter the address in the window's **Server** tab (https, or http to
+this computer); the saved address wins over the variable, which is only the default ("Use the
+default" goes back to it, else to `https://app.wysebee.com`).
 A state folder other than the default has a Credential Manager item of its own, so the two
 copies' pairings never replace each other.
 
